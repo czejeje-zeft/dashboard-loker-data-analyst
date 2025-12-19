@@ -1,3 +1,5 @@
 .venv/
 __pycache__/
 gsearch_jobs.csv
+photo/
+analisis.loker.ipynb
