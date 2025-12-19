@@ -8,7 +8,7 @@ Dashboard interaktif untuk menganalisis pasar kerja global, tren gaji, dan skill
 
 🔗 **Live Demo:** [Klik di sini untuk melihat Dashboard](https://dashboard-loker.streamlit.app/)
 
-![Dashboard Overview](screenshot_overview.png)
+![Dashboard Overview](image.png)
 
 ## 📌 Fitur Utama
 
