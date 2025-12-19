@@ -3,8 +3,12 @@ import pandas as pd
 import plotly.express as px
 from collections import Counter
 
-# --- 1. SETUP ---
-st.set_page_config(page_title="Dashboard Loker GSearch", page_icon="💼", layout="wide")
+# --- 1. SETUP HALAMAN ---
+st.set_page_config(
+    page_title="Dashboard Loker Pro 2025",
+    page_icon="🚀",
+    layout="wide"
+)
 
 # --- 2. LOAD DATA ---
 @st.cache_data
@@ -16,14 +20,12 @@ def load_data():
         if 'date_time' in df.columns:
             df['date_time'] = pd.to_datetime(df['date_time'], errors='coerce')
         
-        # Bersihkan skill
+        # Bersihkan skill & WFH
         if 'required_skills' in df.columns:
             df['required_skills'] = df['required_skills'].fillna("")
-            
-        # Bersihkan WFH (Boolean)
         if 'work_from_home' in df.columns:
             df['work_from_home'] = df['work_from_home'].fillna(False)
-
+            
         return df
     except Exception as e:
         st.error(f"Gagal load data: {e}")
@@ -34,149 +36,189 @@ df = load_data()
 if df.empty:
     st.stop()
 
-# --- 3. SIDEBAR ---
-st.sidebar.header("🎛️ Filter Pencarian")
-search = st.sidebar.text_input("Cari Posisi (misal: Data Analyst)")
+# --- 3. SIDEBAR FILTER (UPGRADED) ---
+st.sidebar.header("🎛️ Filter Canggih")
 
-# Filter Data Global
+# A. Pencarian Keyword
+search = st.sidebar.text_input("🔍 Cari Posisi (misal: Analyst)", placeholder="Ketik posisi...")
+
+# B. Filter Tipe Jadwal
+tipe_kerja = st.sidebar.multiselect(
+    "⏳ Tipe Jadwal:",
+    options=df['schedule_type'].unique(),
+    default=df['schedule_type'].unique()
+)
+
+# C. Filter Platform (BARU)
+platform_options = df['via'].value_counts().head(10).index.tolist()
+pilih_platform = st.sidebar.multiselect(
+    "🌐 Platform (Via):",
+    options=platform_options,
+    default=platform_options[:3] # Default pilih top 3
+)
+
+# D. Filter Gaji Minimum (BARU)
+# Ambil max gaji untuk batas slider
+max_salary = int(df['salary_yearly'].max()) if df['salary_yearly'].max() > 0 else 200000
+gaji_min = st.sidebar.slider(
+    "💰 Gaji Minimum (USD/Tahun):",
+    min_value=0,
+    max_value=max_salary,
+    value=0,
+    step=5000,
+    help="Geser untuk menyaring lowongan dengan gaji tinggi"
+)
+
+# E. Filter WFH
+wfh_option = st.sidebar.radio("🏠 Mode Kerja:", ["Semua", "Remote Only", "On-site Only"])
+
+# --- 4. LOGIKA FILTERING ---
 filtered_df = df.copy()
+
+# Terapkan Filter
 if search:
     filtered_df = filtered_df[filtered_df['title'].str.contains(search, case=False, na=False)]
 
-# --- 4. HEADER ---
-st.title("💼 Dashboard Pasar Kerja & Skill Tracker")
-st.markdown(f"Menampilkan **{len(filtered_df):,}** lowongan aktif.")
-st.markdown("---")
+filtered_df = filtered_df[filtered_df['schedule_type'].isin(tipe_kerja)]
 
-# --- 5. TABS VISUALISASI ---
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview Lengkap", "🧠 Analisis Skill", "💰 Gaji", "📋 Data Detail"])
+# Filter Platform (Jika user memilih sesuatu)
+if pilih_platform:
+    filtered_df = filtered_df[filtered_df['via'].isin(pilih_platform)]
 
-# ==========================================
-# TAB 1: OVERVIEW (YANG DI-UPGRADE)
-# ==========================================
+# Filter Gaji
+if gaji_min > 0:
+    filtered_df = filtered_df[filtered_df['salary_yearly'] >= gaji_min]
+
+# Filter WFH
+if wfh_option == "Remote Only":
+    filtered_df = filtered_df[filtered_df['work_from_home'] == True]
+elif wfh_option == "On-site Only":
+    filtered_df = filtered_df[filtered_df['work_from_home'] != True]
+
+# --- 5. DASHBOARD HEADER ---
+st.title("🚀 Dashboard Pasar Kerja & Analisis Gaji")
+st.markdown(f"""
+<div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
+    <strong>Status:</strong> Menampilkan <b>{len(filtered_df):,}</b> lowongan dari total database.
+</div>
+""", unsafe_allow_html=True)
+
+# --- 6. TABS CONTENT ---
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview", "🧠 Skill", "💰 Analisis Gaji", "📋 Data Detail"])
+
+# === TAB 1: OVERVIEW ===
 with tab1:
-    # --- ROW 1: METRICS (4 Kolom) ---
+    # Kartu Metrik
     c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Lowongan", f"{len(filtered_df):,}", help="Jumlah lowongan setelah filter")
     
-    with c1:
-        st.metric("Total Lowongan", f"{len(filtered_df):,}")
+    # Rata2 Gaji (Hanya yg ada datanya)
+    gaji_valid = filtered_df[filtered_df['salary_yearly'] > 0]
+    avg_gaji = gaji_valid['salary_yearly'].mean() if not gaji_valid.empty else 0
+    c2.metric("Rata-rata Gaji", f"${avg_gaji:,.0f}", delta_color="normal")
     
-    with c2:
-        # Hitung % Remote
-        remote_count = filtered_df['work_from_home'].sum()
-        remote_pct = (remote_count / len(filtered_df)) * 100
-        st.metric("Peluang Remote (WFH)", f"{remote_pct:.1f}%")
-        
-    with c3:
-        # Top Platform
-        top_platform = filtered_df['via'].mode()[0]
-        st.metric("Platform Terpopuler", top_platform)
-        
-    with c4:
-        # Perusahaan
-        total_comp = filtered_df['company_name'].nunique()
-        st.metric("Jumlah Perusahaan", f"{total_comp:,}")
+    c3.metric("Platform Terbanyak", filtered_df['via'].mode()[0] if not filtered_df.empty else "-")
+    c4.metric("Perusahaan Unik", f"{filtered_df['company_name'].nunique():,}")
 
-    st.markdown("---")
+    st.divider()
 
-    # --- ROW 2: CHART TYPE & LOCATION (2 Kolom) ---
-    col_left, col_right = st.columns(2)
-
-    with col_left:
-        st.subheader("📍 Top 10 Lokasi")
+    # Charts Row 1
+    col_l, col_r = st.columns(2)
+    
+    with col_l:
+        st.subheader("📍 Persebaran Lokasi")
         top_loc = filtered_df['location'].value_counts().head(10).reset_index()
         top_loc.columns = ['Lokasi', 'Jumlah']
-        
-        fig_loc = px.bar(
-            top_loc, x='Jumlah', y='Lokasi', orientation='h',
-            color='Jumlah', color_continuous_scale='Blues',
-            text='Jumlah'
-        )
+        fig_loc = px.bar(top_loc, x='Jumlah', y='Lokasi', orientation='h', 
+                         color='Jumlah', color_continuous_scale='Blues')
         fig_loc.update_layout(yaxis={'categoryorder':'total ascending'})
         st.plotly_chart(fig_loc, use_container_width=True)
-
-    with col_right:
-        st.subheader("🌐 Platform (Via) Lowongan")
-        top_via = filtered_df['via'].value_counts().head(8).reset_index()
-        top_via.columns = ['Platform', 'Jumlah']
         
-        fig_via = px.pie(
-            top_via, values='Jumlah', names='Platform', 
-            hole=0.4, color_discrete_sequence=px.colors.qualitative.Prism
-        )
-        st.plotly_chart(fig_via, use_container_width=True)
+    with col_r:
+        st.subheader("🏢 Top Perusahaan")
+        top_comp = filtered_df['company_name'].value_counts().head(10).reset_index()
+        top_comp.columns = ['Perusahaan', 'Jumlah']
+        fig_comp = px.bar(top_comp, x='Jumlah', y='Perusahaan', orientation='h',
+                          color='Jumlah', color_continuous_scale='Greens')
+        fig_comp.update_layout(yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(fig_comp, use_container_width=True)
 
-    # --- ROW 3: WORK STYLE & SCHEDULE (2 Kolom) ---
-    c_l, c_r = st.columns(2)
-    
-    with c_l:
-        st.subheader("🏠 Remote vs On-site")
-        # Buat dataframe ringkas untuk WFH
-        wfh_counts = filtered_df['work_from_home'].value_counts().reset_index()
-        wfh_counts.columns = ['Status', 'Jumlah']
-        wfh_counts['Status'] = wfh_counts['Status'].map({True: 'Remote / WFH', False: 'On-site / Hybrid'})
-        
-        fig_wfh = px.pie(
-            wfh_counts, values='Jumlah', names='Status', 
-            color='Status',
-            color_discrete_map={'Remote / WFH':'#00CC96', 'On-site / Hybrid':'#EF553B'}
-        )
-        st.plotly_chart(fig_wfh, use_container_width=True)
-
-    with c_r:
-        st.subheader("⏳ Tipe Jadwal Kerja")
-        schedule_counts = filtered_df['schedule_type'].value_counts().head(5).reset_index()
-        schedule_counts.columns = ['Tipe', 'Jumlah']
-        
-        fig_sch = px.bar(
-            schedule_counts, x='Tipe', y='Jumlah', 
-            color='Jumlah', color_continuous_scale='Viridis'
-        )
-        st.plotly_chart(fig_sch, use_container_width=True)
-
-# ==========================================
-# TAB 2: SKILL
-# ==========================================
+# === TAB 2: SKILL ===
 with tab2:
-    st.subheader("🔥 Skill Paling Banyak Dicari")
+    st.subheader("🔥 Skill Populer")
+    all_skills = filtered_df['required_skills'].str.split(', ').explode().tolist()
+    all_skills = [s for s in all_skills if s]
     
-    all_skills_list = filtered_df['required_skills'].str.split(', ').explode().tolist()
-    all_skills_list = [s for s in all_skills_list if s] # Filter kosong
-    
-    if all_skills_list:
-        skill_counts = pd.DataFrame(Counter(all_skills_list).most_common(15), columns=['Skill', 'Jumlah'])
-        
-        fig_skill = px.bar(
-            skill_counts, x='Jumlah', y='Skill', orientation='h', 
-            title=f"Top 15 Skill ({search if search else 'Semua Data'})",
-            text='Jumlah', color='Jumlah', color_continuous_scale='Magma'
-        )
+    if all_skills:
+        skill_counts = pd.DataFrame(Counter(all_skills).most_common(15), columns=['Skill', 'Jumlah'])
+        fig_skill = px.bar(skill_counts, x='Jumlah', y='Skill', orientation='h', 
+                           color='Jumlah', color_continuous_scale='Magma', text='Jumlah')
         fig_skill.update_layout(yaxis={'categoryorder':'total ascending'})
         st.plotly_chart(fig_skill, use_container_width=True)
     else:
-        st.warning("Tidak ada skill terdeteksi.")
+        st.warning("Tidak ada data skill untuk filter ini.")
 
-# ==========================================
-# TAB 3: GAJI
-# ==========================================
+# === TAB 3: GAJI (UPGRADED) ===
 with tab3:
-    st.subheader("💰 Analisis Gaji Tahunan (USD)")
-    df_gaji = filtered_df[filtered_df['salary_yearly'] > 0]
+    st.subheader("💰 Distribusi Gaji Tahunan")
     
-    if not df_gaji.empty:
-        c1, c2 = st.columns(2)
-        c1.metric("Rata-rata", f"${df_gaji['salary_yearly'].mean():,.0f}")
-        c2.metric("Median", f"${df_gaji['salary_yearly'].median():,.0f}")
+    if not gaji_valid.empty:
+        # Histogram Cantik
+        fig_hist = px.histogram(
+            gaji_valid, 
+            x="salary_yearly", 
+            nbins=40,
+            title="Sebaran Gaji (USD)",
+            color_discrete_sequence=['#3366CC'], # Warna solid elegan
+            opacity=0.8
+        )
+        # Menambahkan garis batas antar bar agar tidak menempel
+        fig_hist.update_traces(marker_line_color='white', marker_line_width=1.5)
+        fig_hist.update_layout(bargap=0.1) # Jarak antar bar
         
-        fig_hist = px.histogram(df_gaji, x="salary_yearly", nbins=30, color_discrete_sequence=['#636EFA'])
         st.plotly_chart(fig_hist, use_container_width=True)
+        
+        # Statistik Tambahan
+        st.info(f"💡 Lowongan dengan gaji tertinggi: **${gaji_valid['salary_yearly'].max():,.0f}**")
     else:
-        st.info("Data gaji tidak tersedia untuk filter ini.")
+        st.warning("Data gaji tidak tersedia atau semua bernilai 0/NaN.")
 
-# ==========================================
-# TAB 4: DATA DETAIL
-# ==========================================
+# === TAB 4: DATA DETAIL (UPGRADED) ===
 with tab4:
-    st.dataframe(filtered_df.head(1000), use_container_width=True)
+    st.subheader("📋 Tabel Detail Lowongan")
+    
+    # Pilih kolom untuk ditampilkan
+    show_cols = ['title', 'company_name', 'location', 'salary_yearly', 'via', 'date_time', 'schedule_type']
+    
+    # Filter kolom yang benar-benar ada di data
+    valid_cols = [c for c in show_cols if c in filtered_df.columns]
+    
+    # Tampilkan dataframe dengan formatting khusus
+    st.dataframe(
+        filtered_df[valid_cols].head(2000), # Batasi 2000 baris di UI
+        use_container_width=True,
+        column_config={
+            "title": "Posisi",
+            "company_name": "Perusahaan",
+            "location": "Lokasi",
+            "salary_yearly": st.column_config.NumberColumn(
+                "Gaji (USD)",
+                format="$%d", # Format mata uang
+            ),
+            "date_time": st.column_config.DatetimeColumn(
+                "Tanggal Posting",
+                format="D MMM YYYY, HH:mm"
+            ),
+            "via": "Platform"
+        }
+    )
+    
+    # Tombol Download
     csv = filtered_df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download CSV Full", csv, "loker_full.csv", "text/csv")
+    st.download_button(
+        label="📥 Download Data Lengkap (CSV)",
+        data=csv,
+        file_name="data_loker_terfilter.csv",
+        mime="text/csv",
+        type="primary" # Tombol berwarna
+    )
