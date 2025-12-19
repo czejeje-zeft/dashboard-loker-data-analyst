@@ -26,7 +26,7 @@ Dashboard interaktif untuk menganalisis pasar kerja global, tren gaji, dan skill
 | **Framework** | Streamlit | Membangun web apps interaktif |
 | **Data Processing** | Pandas | Manipulasi dan pembersihan data |
 | **Visualization** | Plotly Express | Membuat grafik interaktif |
-| **Data Source** | GSearch Jobs | Dataset lowongan kerja (Sampled & Cleaned) |
+| **Data Source** | Kaggle/lukebarousse | Data Analyst Job Postings [Pay, Skills, Benefits] (Sampled & Cleaned) |
 
 ## 📂 Struktur Folder
 
